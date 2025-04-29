@@ -36,6 +36,7 @@ type Consumer struct {
 	config   ConsumerConfig
 	logger   *zap.Logger
 	handlers map[string]MessageHandler
+	topics   []string
 }
 
 // MessageHandler is a function that processes a Kafka message
@@ -64,6 +65,7 @@ func NewConsumer(config ConsumerConfig) (*Consumer, error) {
 		config:   config,
 		logger:   config.Logger,
 		handlers: make(map[string]MessageHandler),
+		topics:   config.Topics,
 	}, nil
 }
 
@@ -72,33 +74,24 @@ func (c *Consumer) RegisterHandler(topic string, handler MessageHandler) {
 	c.handlers[topic] = handler
 }
 
-// Subscribe subscribes to the configured topics
-func (c *Consumer) Subscribe() error {
-	if len(c.config.Topics) == 0 {
+// Start begins consuming messages in a loop until context is cancelled
+func (c *Consumer) Start(ctx context.Context) error {
+	if len(c.topics) == 0 {
 		return fmt.Errorf("no topics specified for subscription")
 	}
 
 	c.logger.Info("Subscribing to topics", 
-		zap.Strings("topics", c.config.Topics),
+		zap.Strings("topics", c.topics),
 		zap.String("group_id", c.config.GroupID),
 	)
 
-	err := c.consumer.SubscribeTopics(c.config.Topics, nil)
+	err := c.consumer.SubscribeTopics(c.topics, nil)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to topics: %w", err)
 	}
 
-	return nil
-}
-
-// Start begins consuming messages in a loop until context is cancelled
-func (c *Consumer) Start(ctx context.Context) error {
-	if err := c.Subscribe(); err != nil {
-		return err
-	}
-
 	c.logger.Info("Starting Kafka consumer",
-		zap.Strings("topics", c.config.Topics),
+		zap.Strings("topics", c.topics),
 		zap.String("group_id", c.config.GroupID),
 	)
 

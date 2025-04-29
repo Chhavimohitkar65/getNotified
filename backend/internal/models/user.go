@@ -12,6 +12,7 @@ type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"` // Never expose in JSON responses
 	Name         string    `json:"name"`
+	APIKey       string    `json:"api_key,omitempty"` // API key for authentication
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

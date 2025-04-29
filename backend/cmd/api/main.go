@@ -14,9 +14,11 @@ import (
 	"getnotified/internal/middleware"
 	"getnotified/internal/repositories"
 	"getnotified/internal/services/channel"
+	"getnotified/internal/services/consumer"
 	"getnotified/internal/services/user"
 	"getnotified/pkg/auth"
 	"getnotified/pkg/database"
+	"getnotified/pkg/email"
 	"getnotified/pkg/kafka"
 	"getnotified/pkg/logger"
 	"github.com/gin-contrib/cors"
@@ -25,6 +27,9 @@ import (
 )
 
 func main() {
+	// Set Gin to release mode for production
+	gin.SetMode(gin.ReleaseMode)
+
 	// Initialize logger
 	logger := logger.NewLogger()
 	logger.Info("Starting notification service")
@@ -70,6 +75,57 @@ func main() {
 		logger.Fatal("Failed to initialize Kafka producer: %v", err)
 	}
 	defer kafkaProducer.Close()
+	
+	// Initialize email service
+	emailService := email.NewService(email.Config{
+		APIKey:       cfg.Email.APIKey,
+		FromEmail:    cfg.Email.FromEmail,
+		Domain:       cfg.Email.Domain,
+		DetailedLogs: cfg.Email.DetailedLogs,
+	}, logger)
+	
+	// Initialize repositories
+	notificationRepo := repositories.NewNotificationRepository(db, logger)
+	channelRepo := repositories.NewChannelRepository(db, logger)
+
+	// Initialize notification consumer
+	// Use the zap logger that was already created for migrations
+	// Create a new zap logger specifically for the consumer
+	consumerZapLogger, err := zap.NewProduction()
+	if err != nil {
+		logger.Fatal("Failed to create zap logger for consumer: %v", err)
+	}
+	
+	notificationConsumer, err := consumer.NewNotificationConsumerService(
+		consumer.NotificationConsumerConfig{
+			KafkaConfig: kafka.ConsumerConfig{
+				BootstrapServers: cfg.Kafka.Brokers[0], // Use the first broker from the list
+				GroupID: "notification-consumer",
+				AutoOffsetReset: "earliest",
+				Logger: consumerZapLogger, // Add logger to the Kafka config
+				Topics: []string{cfg.Kafka.Topic}, // Explicitly set the topics to subscribe to
+			},
+			NotificationTopic: cfg.Kafka.Topic,
+			Logger:            consumerZapLogger,
+		},
+		notificationRepo,
+		channelRepo,
+		emailService,
+	)
+	if err != nil {
+		logger.Fatal("Failed to initialize notification consumer: %v", err)
+	}
+
+	// Start notification consumer in a goroutine
+	go func() {
+		if err := notificationConsumer.Start(context.Background()); err != nil {
+			logger.Error("Notification consumer error: %v", err)
+		}
+	}()
+	defer notificationConsumer.Close()
+
+	// Log that notification processing is active
+	logger.Info("Notification consumer started and processing emails from queue")
 
 	// Initialize repositories, services, and handlers
 	router := setupRouter(cfg, db, kafkaProducer, logger)
@@ -148,6 +204,7 @@ func setupRouter(cfg *config.Config, db *database.PostgresDB, kafkaProducer *kaf
 	notificationHandler := handlers.NewNotificationHandler(db, kafkaProducer, logger)
 	templateHandler := handlers.NewTemplateHandler(db, logger)
 	userHandler := handlers.NewUserHandler(userService, logger)
+	userAPIKeyHandler := handlers.NewUserAPIKeyHandler(userService, logger)
 	channelHandler := handlers.NewChannelHandler(channelService, logger)
 
 	// Public routes (no auth required)
@@ -159,19 +216,22 @@ func setupRouter(cfg *config.Config, db *database.PostgresDB, kafkaProducer *kaf
 
 	// Protected routes (auth required)
 	protected := router.Group("/api/v1")
-	// Apply JWT auth middleware
-	protected.Use(middleware.JWTAuthMiddleware(authService, logger))
+	// Create a group for endpoints that can be accessed with either JWT or API Key
+	apiGroup := router.Group("/api/v1")
+	apiGroup.Use(middleware.APIKeyAuthMiddleware(cfg.Auth, userRepo, logger))
 	
-	// Also apply X-API-Key auth middleware if needed for backward compatibility
-	if cfg.Server.Environment != "development" || !cfg.Auth.SkipInDevelopment {
-		protected.Use(middleware.AuthMiddleware(cfg.Auth, logger))
-	}
+	// Apply JWT auth middleware for endpoints that require user authentication
+	protected.Use(middleware.JWTAuthMiddleware(authService, logger))
 	
 	{
 		// User profile
 		protected.GET("/user/profile", userHandler.GetProfile)
 		protected.PUT("/user/profile", userHandler.UpdateProfile)
 		protected.PUT("/user/password", userHandler.UpdatePassword)
+		
+		// API Key management
+		protected.GET("/user/apikey", userAPIKeyHandler.GetAPIKey)
+		protected.POST("/user/apikey/regenerate", userAPIKeyHandler.RegenerateAPIKey)
 
 		// Channels
 		protected.GET("/channels", channelHandler.List)
@@ -187,10 +247,15 @@ func setupRouter(cfg *config.Config, db *database.PostgresDB, kafkaProducer *kaf
 		protected.PUT("/templates/:id", templateHandler.UpdateTemplate)
 		protected.DELETE("/templates/:id", templateHandler.DeleteTemplate)
 
-		// Notifications
-		protected.POST("/notifications", notificationHandler.SendNotification)
-		protected.GET("/notifications", notificationHandler.ListNotifications)
-		protected.GET("/notifications/:id", notificationHandler.GetNotification)
+		// Other protected routes remain in the JWT-only protected group
+	}
+
+	// API endpoints that can be accessed with either JWT token or API key
+	{
+		// Notifications - accessible via API key
+		apiGroup.POST("/notifications", notificationHandler.SendNotification)
+		apiGroup.GET("/notifications", notificationHandler.ListNotifications)
+		apiGroup.GET("/notifications/:id", notificationHandler.GetNotification)
 	}
 
 	// Health check

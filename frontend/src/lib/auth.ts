@@ -98,23 +98,32 @@ export const authApi = {
 
       // Parse the response
       const responseData = await response.json();
+      console.log('Registration successful response:', responseData);
       
-      // Check the structure of the response
-      if (responseData.token && responseData.user) {
-        // Proper auth response with token and user
-        setAuthToken(responseData.token);
-        setCurrentUser(responseData.user);
-        return { data: responseData };
+      // For successful registration, we need to log in to get the token
+      const loginResult = await this.login({
+        email: data.email,
+        password: data.password
+      });
+      
+      if (loginResult.error) {
+        console.error('Auto-login after registration failed:', loginResult.error);
+        // Even if auto-login fails, consider registration successful
+        return { 
+          data: {
+            token: 'registration-success', // Placeholder token, user will need to log in
+            user: {
+              id: 0,
+              email: data.email,
+              name: data.name,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }
+          }
+        };
       }
       
-      // Direct user object response (fallback for older API)
-      const authData = {
-        token: 'temp-token', // Temporary token for now
-        user: responseData // The response itself is the user data
-      };
-      setAuthToken(authData.token);
-      setCurrentUser(responseData);
-      return { data: authData };
+      return loginResult;
     } catch (error) {
       console.error('Register error:', error);
       return { error: 'An unexpected error occurred' };

@@ -183,6 +183,46 @@ func (r *ChannelRepository) GetDefaultByType(ctx context.Context, userID int, ch
 	return defaultChannel, nil
 }
 
+// GetActiveEmailChannel returns the active default email channel for a user
+func (r *ChannelRepository) GetActiveEmailChannel(ctx context.Context, userID int) (*models.Channel, error) {
+	query := `
+		SELECT id, user_id, name, type, config, is_active, created_at, updated_at
+		FROM channels
+		WHERE user_id = $1 AND type = 'email' AND is_active = true
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var channel models.Channel
+	var configData []byte
+
+	r.logger.Debug("Getting active email channel for user: %d", userID)
+
+	err := r.db.DB.QueryRowContext(ctx, query, userID).Scan(
+		&channel.ID,
+		&channel.UserID,
+		&channel.Name,
+		&channel.Type,
+		&configData,
+		&channel.IsActive,
+		&channel.CreatedAt,
+		&channel.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		r.logger.Debug("No active email channel found for user: %d", userID)
+		return nil, nil // No channel found
+	}
+
+	if err != nil {
+		r.logger.Error("Failed to get active email channel: %v", err)
+		return nil, err
+	}
+
+	channel.Config = configData
+	return &channel, nil
+}
+
 // Update updates a channel in the database
 func (r *ChannelRepository) Update(ctx context.Context, channel *models.Channel) error {
 	query := `

@@ -28,8 +28,8 @@ func NewUserRepository(db *database.PostgresDB, logger *logger.Logger) *UserRepo
 // Create adds a new user to the database
 func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 	query := `
-		INSERT INTO users (email, password_hash, name, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (email, password_hash, name, api_key, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
 
@@ -43,6 +43,7 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 		user.Email,
 		user.PasswordHash,
 		user.Name,
+		user.APIKey,
 		user.CreatedAt,
 		user.UpdatedAt,
 	).Scan(&user.ID)
@@ -51,7 +52,7 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
 // GetByEmail retrieves a user by email
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, created_at, updated_at
+		SELECT id, email, password_hash, name, api_key, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -62,6 +63,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 		&user.Email,
 		&user.PasswordHash,
 		&user.Name,
+		&user.APIKey,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -79,7 +81,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id int) (*models.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, created_at, updated_at
+		SELECT id, email, password_hash, name, api_key, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -90,6 +92,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id int) (*models.User, err
 		&user.Email,
 		&user.PasswordHash,
 		&user.Name,
+		&user.APIKey,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -108,8 +111,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id int) (*models.User, err
 func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 	query := `
 		UPDATE users
-		SET name = $1, updated_at = $2
-		WHERE id = $3
+		SET name = $1, api_key = $2, updated_at = $3
+		WHERE id = $4
 	`
 
 	user.UpdatedAt = time.Now()
@@ -118,6 +121,7 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 		ctx,
 		query,
 		user.Name,
+		user.APIKey,
 		user.UpdatedAt,
 		user.ID,
 	)

@@ -69,7 +69,8 @@ async function fetchWithErrorHandling<T>(
     
     // Add authorization header if token exists
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      const authHeader = 'Authorization';
+      headers[authHeader] = `Bearer ${token}`;
     }
     
     const response = await fetch(url, {
@@ -145,7 +146,26 @@ export const notificationApi = {
   },
 };
 
+// API Key interfaces
+export interface APIKeyResponse {
+  api_key: string;
+}
+
+// User API
+export const userApi = {
+  getAPIKey: async (): Promise<ApiResponse<APIKeyResponse>> => {
+    return fetchWithErrorHandling<APIKeyResponse>(`${API_BASE_URL}/user/apikey`);
+  },
+  
+  regenerateAPIKey: async (): Promise<ApiResponse<APIKeyResponse>> => {
+    return fetchWithErrorHandling<APIKeyResponse>(`${API_BASE_URL}/user/apikey/regenerate`, {
+      method: 'POST',
+    });
+  },
+};
+
 export default {
   templates: templateApi,
   notifications: notificationApi,
+  user: userApi,
 };

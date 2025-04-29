@@ -18,6 +18,7 @@ import (
 type NotificationConsumerService struct {
 	consumer          *kafka.Consumer
 	notificationRepo  *repositories.NotificationRepository
+	channelRepo       *repositories.ChannelRepository
 	logger            *zap.Logger
 	emailService      *email.Service
 	notificationTopic string
@@ -34,6 +35,7 @@ type NotificationConsumerConfig struct {
 func NewNotificationConsumerService(
 	config NotificationConsumerConfig,
 	notificationRepo *repositories.NotificationRepository,
+	channelRepo *repositories.ChannelRepository,
 	emailService *email.Service,
 ) (*NotificationConsumerService, error) {
 	consumer, err := kafka.NewConsumer(config.KafkaConfig)
@@ -44,6 +46,7 @@ func NewNotificationConsumerService(
 	service := &NotificationConsumerService{
 		consumer:          consumer,
 		notificationRepo:  notificationRepo,
+		channelRepo:       channelRepo,
 		emailService:      emailService,
 		logger:            config.Logger,
 		notificationTopic: config.NotificationTopic,
@@ -80,11 +83,13 @@ func (s *NotificationConsumerService) handleNotification(data []byte) error {
 		zap.String("channel", notification.Channel),
 	)
 
-	// Update notification status to "processing"
-	notification.Status = models.NotificationStatusProcessing
-	if err := s.notificationRepo.UpdateNotification(&notification); err != nil {
-		return fmt.Errorf("failed to update notification status: %w", err)
-	}
+	// Note: Database constraint only allows: 'queued', 'sent', 'delivered', 'failed'
+	// Skip setting to 'processing' since it's not in the database constraint
+	// Just log that we're processing it without updating the database
+	s.logger.Info("Processing notification, keeping status as queued",
+		zap.Int("id", notification.ID),
+		zap.String("recipient", notification.Recipient),
+	)
 
 	var err error
 	// Process based on channel type
@@ -126,7 +131,74 @@ func (s *NotificationConsumerService) handleNotification(data []byte) error {
 
 // sendEmailNotification sends an email notification
 func (s *NotificationConsumerService) sendEmailNotification(notification *models.Notification) error {
-	// Use individual parameters for the email service
+	s.logger.Info("Sending email notification", 
+		zap.Int("id", notification.ID),
+		zap.String("recipient", notification.Recipient),
+		zap.String("subject", notification.Subject),
+		zap.Int("user_id", notification.UserID),
+	)
+
+	// Use default email settings as fallback
+	fromEmail := "simplivu@simplivu.com"
+	domain := "simplivu.com"
+	
+	// Try to get user's configured email channel if userID is available
+	if notification.UserID > 0 {
+		channel, err := s.channelRepo.GetActiveEmailChannel(context.Background(), notification.UserID)
+		if err != nil {
+			s.logger.Warn("Error getting email channel settings, using defaults", 
+				zap.Error(err),
+				zap.Int("user_id", notification.UserID),
+			)
+		} else if channel != nil {
+			s.logger.Info("Using user's email channel configuration", 
+				zap.Int("channel_id", channel.ID),
+				zap.String("channel_name", channel.Name),
+			)
+
+			// Parse email configuration from channel
+			var emailConfig models.EmailConfig
+			if err := json.Unmarshal(channel.Config, &emailConfig); err == nil {
+				// Override email service with user's configured one
+				s.logger.Info("Using email settings from channel", 
+					zap.String("from_email", emailConfig.FromEmail),
+				)
+				
+				// Update from email and domain from channel config
+				fromEmail = emailConfig.FromEmail
+				if emailConfig.Domain != "" {
+					domain = emailConfig.Domain
+				}
+				
+				// Create a custom email service with the user's API key if different
+				if emailConfig.APIKey != "" {
+					tempEmailService := email.NewService(email.Config{
+						APIKey:       emailConfig.APIKey,
+						FromEmail:    fromEmail,
+						Domain:       domain,
+						DetailedLogs: true,
+					}, nil)
+					
+					_, err := tempEmailService.SendEmail(
+						notification.Recipient,
+						notification.Subject,
+						notification.Content,
+						"", // No plain text version
+					)
+					return err
+				}
+			} else {
+				s.logger.Warn("Could not parse email config from channel", zap.Error(err))
+			}
+		}
+	}
+
+	// Use the default email service with updated from email and domain
+	s.logger.Info("Using default email settings", 
+		zap.String("from_email", fromEmail),
+		zap.String("domain", domain),
+	)
+	
 	_, err := s.emailService.SendEmail(
 		notification.Recipient,
 		notification.Subject,

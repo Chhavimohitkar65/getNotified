@@ -68,11 +68,6 @@ const navigationItems = [
     href: "/logs",
   },
   {
-    label: "Channels",
-    icon: Mail,
-    href: "/channels",
-  },
-  {
     label: "Settings",
     icon: Settings,
     href: "/settings",

@@ -25,6 +25,7 @@ const (
 // Notification represents a notification
 type Notification struct {
 	ID         int               `json:"id"`
+	UserID     int               `json:"user_id"`
 	TemplateID *int              `json:"template_id,omitempty"`
 	Recipient  string            `json:"recipient"`
 	Subject    string            `json:"subject"`
@@ -38,6 +39,7 @@ type Notification struct {
 
 // NotificationRequest represents a request to send a notification
 type NotificationRequest struct {
+	UserID      int                     `json:"user_id"`
 	TemplateID  *int                    `json:"template_id"`
 	Recipient   string                  `json:"recipient" binding:"required"`
 	Subject     string                  `json:"subject"`
@@ -49,6 +51,7 @@ type NotificationRequest struct {
 // KafkaNotificationMessage represents a notification message for Kafka
 type KafkaNotificationMessage struct {
 	ID         int                     `json:"id"`
+	UserID     int                     `json:"user_id"`
 	TemplateID *int                    `json:"template_id,omitempty"`
 	Recipient  string                  `json:"recipient"`
 	Subject    string                  `json:"subject"`
