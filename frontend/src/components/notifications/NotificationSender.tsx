@@ -128,6 +128,7 @@ const NotificationSender = () => {
       const notificationData = {
         template_id: Number.parseInt(values.template_id, 10),
         recipient: values.recipient,
+        channel: 'email', // Add the required channel field
         metadata,
       };
       

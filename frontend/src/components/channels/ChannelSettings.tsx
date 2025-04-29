@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, MessageSquare, Bell, Phone, Check } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { Channel } from '@/lib/channel';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -51,14 +52,20 @@ const emailSchema = z.object({
   enabled: z.boolean(),
 });
 
-const ChannelSettings = () => {
+interface ChannelSettingsProps {
+  onSave: (success: boolean) => Promise<void>;
+  existingChannel?: Channel;
+  userMode?: boolean;
+}
+
+const ChannelSettings = ({ onSave, existingChannel, userMode = false }: ChannelSettingsProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof emailSchema>>({
     resolver: zodResolver(emailSchema),
     defaultValues: {
-      provider: 'sendgrid',
+      provider: 'resend',
       apiKey: '',
       fromEmail: '',
       fromName: '',
@@ -66,25 +73,67 @@ const ChannelSettings = () => {
     },
   });
 
+  useEffect(() => {
+    // Initialize form with existing channel data if provided
+    if (existingChannel && existingChannel.type === 'email') {
+      const config = existingChannel.config;
+      if (typeof config === 'object' && 'provider' in config) {
+        form.reset({
+          provider: typeof config.provider === 'string' ? config.provider : 'resend',
+          apiKey: typeof config.api_key === 'string' ? config.api_key : '',
+          fromEmail: typeof config.from_email === 'string' ? config.from_email : '',
+          fromName: typeof config.from_name === 'string' ? config.from_name : '',
+          enabled: typeof config.is_default === 'boolean' ? config.is_default : true,
+        });
+      }
+    }
+  }, [existingChannel, form]);
+
   const onSubmit = async (values: z.infer<typeof emailSchema>) => {
     setIsSubmitting(true);
     try {
       // In a real app, this would send the data to your backend
       console.log('Email configuration:', values);
       
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Prepare channel data for the backend
+      const channelData: {
+        name: string;
+        type: string;
+        config: Record<string, unknown>;
+        is_active: boolean;
+      } = {
+        name: `${values.provider} Email Channel`,
+        type: 'email',
+        config: {
+          provider: values.provider,
+          api_key: values.apiKey,
+          from_email: values.fromEmail,
+          from_name: values.fromName,
+          is_default: values.enabled
+        },
+        is_active: values.enabled
+      };
+      
+      // Log the channel data that would be sent to the backend
+      console.log('Channel data for backend:', channelData);
       
       toast({
-        title: 'Channel settings updated',
-        description: 'Your email notification settings have been saved.',
+        title: 'Channel settings saved',
+        description: 'Your email channel has been configured',
       });
+      
+      // Call the onSave prop with success=true when form submission succeeds
+      await onSave(true);
     } catch (error) {
+      console.error('Error saving channel settings:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'There was a problem saving your settings.',
+        title: 'Failed to save settings',
+        description: 'An error occurred while saving your channel settings',
       });
+      
+      // Notify parent component of failure
+      await onSave(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -163,6 +212,8 @@ const ChannelSettings = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
+                            <SelectItem value="resend">Resend</SelectItem>
+                            <SelectItem value="mailersend">Mailersend</SelectItem>
                             <SelectItem value="sendgrid">SendGrid</SelectItem>
                             <SelectItem value="mailgun">Mailgun</SelectItem>
                             <SelectItem value="ses">Amazon SES</SelectItem>
@@ -170,7 +221,7 @@ const ChannelSettings = () => {
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Select your preferred email service provider
+                          Select your preferred email service provider. Resend is currently used by the system.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -186,13 +237,33 @@ const ChannelSettings = () => {
                         <FormControl>
                           <Input 
                             type="password" 
-                            placeholder="Enter your provider API key" 
+                            placeholder="Enter your API key" 
                             {...field} 
                           />
                         </FormControl>
                         <FormDescription>
-                          The API key for authenticating with your email provider
+                          The API key for your email service provider
                         </FormDescription>
+                        {form.watch('provider') === 'resend' && (
+                          <Alert className="mt-2 bg-blue-50">
+                            <Mail className="h-4 w-4" />
+                            <AlertTitle>Resend Configuration</AlertTitle>
+                            <AlertDescription>
+                              Make sure to also set up your domain in the Resend dashboard and verify it.
+                              You can get your API key from the Resend dashboard.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        {form.watch('provider') === 'mailersend' && (
+                          <Alert className="mt-2 bg-indigo-50">
+                            <Mail className="h-4 w-4" />
+                            <AlertTitle>Mailersend Configuration</AlertTitle>
+                            <AlertDescription>
+                              You'll need to create a Mailersend account, set up a domain, and generate an API token
+                              with email sending permissions.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

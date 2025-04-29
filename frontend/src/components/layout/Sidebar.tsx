@@ -8,7 +8,9 @@ import {
   LogIn,
   MessageSquare,
   Activity,
-  Send
+  Send,
+  User,
+  Mail
 } from 'lucide-react';
 import {
   Sidebar as SidebarContainer,
@@ -66,9 +68,19 @@ const navigationItems = [
     href: "/logs",
   },
   {
-    label: "Channel Settings",
+    label: "Channels",
+    icon: Mail,
+    href: "/channels",
+  },
+  {
+    label: "Settings",
     icon: Settings,
     href: "/settings",
+  },
+  {
+    label: "Profile",
+    icon: User,
+    href: "/profile",
   }
 ];
 

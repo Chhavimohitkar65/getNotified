@@ -23,4 +23,5 @@ email:
 
 auth:
   apikey: "test-api-key"
+  jwtsecret: "jwt-secret-key-for-authentication"
   skipindevelopment: true

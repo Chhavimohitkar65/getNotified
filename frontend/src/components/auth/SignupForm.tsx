@@ -14,11 +14,13 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { authApi } from '@/lib/auth';
+import type { RegisterRequest } from '@/lib/auth';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters' }),
   email: z.string().email({ message: 'Please enter a valid email address' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
+  password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
   confirmPassword: z.string(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -44,23 +46,51 @@ const SignupForm = () => {
     setIsLoading(true);
     
     try {
-      // This is a mock signup - in a real app, you would connect to your authentication API
-      console.log('Signup attempt with:', values);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: 'Account created!',
-        description: 'You have successfully created your account.',
+      // First, log the data being sent for debugging
+      console.log('Sending registration data:', {
+        name: values.name,
+        email: values.email,
+        password: '[REDACTED]'
       });
       
-      navigate('/dashboard');
+      const registerData: RegisterRequest = {
+        name: values.name,
+        email: values.email,
+        password: values.password
+      };
+      
+      const result = await authApi.register(registerData);
+      
+      if (result.error) {
+        let errorMessage = result.error;
+        
+        // Handle specific error cases with more user-friendly messages
+        if (errorMessage.includes('already exists')) {
+          errorMessage = 'This email address is already registered. Please try logging in or use a different email.';
+        } else if (errorMessage.includes('Password') && errorMessage.includes('min')) {
+          errorMessage = 'Password must be at least 8 characters long.';
+        } else if (errorMessage.includes('validation')) {
+          errorMessage = 'Please check your information. Make sure your password is at least 8 characters long.';
+        }
+        
+        toast({
+          variant: 'destructive',
+          title: 'Sign up failed',
+          description: errorMessage,
+        });
+      } else {
+        toast({
+          title: 'Account created!',
+          description: 'You have successfully created your account.',
+        });
+        
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Sign up failed',
-        description: 'There was an error creating your account. Please try again.',
+        description: 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsLoading(false);

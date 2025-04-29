@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { authApi } from '@/lib/auth';
+import type { LoginRequest } from '@/lib/auth';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -37,23 +39,32 @@ const LoginForm = () => {
     setIsLoading(true);
     
     try {
-      // This is a mock login - in a real app, you would connect to your authentication API
-      console.log('Login attempt with:', values);
+      const loginData: LoginRequest = {
+        email: values.email,
+        password: values.password
+      };
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await authApi.login(loginData);
       
-      toast({
-        title: 'Success!',
-        description: 'You have successfully logged in.',
-      });
-      
-      navigate('/dashboard');
+      if (result.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Login failed',
+          description: result.error,
+        });
+      } else {
+        toast({
+          title: 'Success!',
+          description: 'You have successfully logged in.',
+        });
+        
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Login failed',
-        description: 'Please check your credentials and try again.',
+        description: 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsLoading(false);

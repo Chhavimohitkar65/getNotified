@@ -46,6 +46,7 @@ type EmailConfig struct {
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
 	APIKey            string
+	JWTSecret         string
 	SkipInDevelopment bool
 }
 
@@ -76,6 +77,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("email.detailedlogs", true)
 	
 	viper.SetDefault("auth.apikey", "your-secret-api-key")
+	viper.SetDefault("auth.jwtsecret", "your-jwt-secret-key")
 	viper.SetDefault("auth.skipindevelopment", true)
 	
 	// Environment variables
@@ -101,6 +103,7 @@ func LoadConfig() (*Config, error) {
 	viper.BindEnv("email.detailedlogs", "RESEND_DETAILED_LOGS")
 	
 	viper.BindEnv("auth.apikey", "AUTH_API_KEY")
+	viper.BindEnv("auth.jwtsecret", "AUTH_JWT_SECRET")
 	viper.BindEnv("auth.skipindevelopment", "AUTH_SKIP_IN_DEVELOPMENT")
 	
 	// Read configuration file (if exists)

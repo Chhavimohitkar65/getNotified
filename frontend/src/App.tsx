@@ -11,7 +11,9 @@ import Send from "./pages/Send";
 import Templates from "./pages/Templates";
 import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import ChannelManager from "./components/channels/ChannelManager";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,8 @@ const App = () => (
             <Route path="/templates/:id" element={<Templates />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/channels" element={<ChannelManager />} />
           </Route>
           
           <Route path="*" element={<NotFound />} />

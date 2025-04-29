@@ -46,24 +46,35 @@ export interface Notification {
 export interface SendNotificationRequest {
   template_id: number;
   recipient: string;
+  channel: string; // Add the required channel field
   metadata?: Record<string, unknown>;
 }
 
-// API key for authentication - in a real app, this would be stored securely
-const API_KEY = 'test-api-key';
+// Use JWT token for authentication
+import { getAuthToken } from './auth';
 
 async function fetchWithErrorHandling<T>(
   url: string, 
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   try {
+    // Get JWT token from auth system
+    const token = getAuthToken();
+    
+    // Prepare headers with auth token if available
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    // Add authorization header if token exists
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-        ...options.headers,
-      },
+      headers,
     });
 
     const data = await response.json();

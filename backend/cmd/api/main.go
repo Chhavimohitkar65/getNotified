@@ -12,6 +12,10 @@ import (
 	"getnotified/internal/config"
 	"getnotified/internal/handlers"
 	"getnotified/internal/middleware"
+	"getnotified/internal/repositories"
+	"getnotified/internal/services/channel"
+	"getnotified/internal/services/user"
+	"getnotified/pkg/auth"
 	"getnotified/pkg/database"
 	"getnotified/pkg/kafka"
 	"getnotified/pkg/logger"
@@ -111,40 +115,82 @@ func setupRouter(cfg *config.Config, db *database.PostgresDB, kafkaProducer *kaf
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerMiddleware(logger))
 
-	// Configure CORS
+	// Configure CORS - move this before other middleware to ensure it runs first
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:8080"}, // Frontend URLs
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:8080", "*"}, // Frontend URLs
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+	
+	// Add a handler specifically for OPTIONS requests
+	router.OPTIONS("/api/v1/*path", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	// Initialize JWT auth service
+	authService := auth.NewService(auth.Config{
+		SecretKey:     cfg.Auth.JWTSecret,
+		TokenDuration: 24 * time.Hour,
+	})
+
+	// Initialize repositories
+	userRepo := repositories.NewUserRepository(db, logger)
+	channelRepo := repositories.NewChannelRepository(db, logger)
+
+	// Initialize services
+	userService := user.NewService(userRepo, authService, logger)
+	channelService := channel.NewService(channelRepo, logger)
 
 	// Initialize handlers
 	notificationHandler := handlers.NewNotificationHandler(db, kafkaProducer, logger)
 	templateHandler := handlers.NewTemplateHandler(db, logger)
+	userHandler := handlers.NewUserHandler(userService, logger)
+	channelHandler := handlers.NewChannelHandler(channelService, logger)
 
-	// API v1 routes
-	v1 := router.Group("/api/v1")
+	// Public routes (no auth required)
+	router.POST("/api/v1/auth/register", userHandler.Register)
+	router.POST("/api/v1/auth/login", userHandler.Login)
+	router.GET("/api/v1/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Protected routes (auth required)
+	protected := router.Group("/api/v1")
+	// Apply JWT auth middleware
+	protected.Use(middleware.JWTAuthMiddleware(authService, logger))
 	
-	// Apply auth middleware if needed
+	// Also apply X-API-Key auth middleware if needed for backward compatibility
 	if cfg.Server.Environment != "development" || !cfg.Auth.SkipInDevelopment {
-		v1.Use(middleware.AuthMiddleware(cfg.Auth, logger))
+		protected.Use(middleware.AuthMiddleware(cfg.Auth, logger))
 	}
 	
 	{
+		// User profile
+		protected.GET("/user/profile", userHandler.GetProfile)
+		protected.PUT("/user/profile", userHandler.UpdateProfile)
+		protected.PUT("/user/password", userHandler.UpdatePassword)
+
+		// Channels
+		protected.GET("/channels", channelHandler.List)
+		protected.POST("/channels", channelHandler.Create)
+		protected.GET("/channels/:id", channelHandler.GetByID)
+		protected.PUT("/channels/:id", channelHandler.Update)
+		protected.DELETE("/channels/:id", channelHandler.Delete)
+
 		// Templates
-		v1.GET("/templates", templateHandler.ListTemplates)
-		v1.POST("/templates", templateHandler.CreateTemplate)
-		v1.GET("/templates/:id", templateHandler.GetTemplate)
-		v1.PUT("/templates/:id", templateHandler.UpdateTemplate)
-		v1.DELETE("/templates/:id", templateHandler.DeleteTemplate)
+		protected.GET("/templates", templateHandler.ListTemplates)
+		protected.POST("/templates", templateHandler.CreateTemplate)
+		protected.GET("/templates/:id", templateHandler.GetTemplate)
+		protected.PUT("/templates/:id", templateHandler.UpdateTemplate)
+		protected.DELETE("/templates/:id", templateHandler.DeleteTemplate)
 
 		// Notifications
-		v1.POST("/notifications", notificationHandler.SendNotification)
-		v1.GET("/notifications", notificationHandler.ListNotifications)
-		v1.GET("/notifications/:id", notificationHandler.GetNotification)
+		protected.POST("/notifications", notificationHandler.SendNotification)
+		protected.GET("/notifications", notificationHandler.ListNotifications)
+		protected.GET("/notifications/:id", notificationHandler.GetNotification)
 	}
 
 	// Health check
