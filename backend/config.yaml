@@ -1,0 +1,26 @@
+server:
+  port: "8000"
+  environment: "development"
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "postgres"
+  dbname: "postgres"
+  sslmode: "disable"
+
+kafka:
+  brokers:
+    - "localhost:9092"
+  topic: "notifications"
+
+email:
+  apikey: "re_eVHEriVc_JmVmqFq55PzqXQtC5YZe4tPA"
+  fromemail: "simplivu@simplivu.com"
+  domain: "simplivu.com"
+  detailedlogs: true
+
+auth:
+  apikey: "test-api-key"
+  skipindevelopment: true
