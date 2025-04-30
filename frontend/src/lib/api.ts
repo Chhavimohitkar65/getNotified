@@ -43,6 +43,14 @@ export interface Notification {
   sent_at: string | null;
 }
 
+export interface NotificationListResponse {
+  data: Notification[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export interface SendNotificationRequest {
   template_id: number;
   recipient: string;
@@ -135,8 +143,8 @@ export const notificationApi = {
     });
   },
   
-  list: async (page = 1, pageSize = 20): Promise<ApiResponse<Notification[]>> => {
-    return fetchWithErrorHandling<Notification[]>(
+  list: async (page = 1, pageSize = 20): Promise<ApiResponse<NotificationListResponse | Notification[]>> => {
+    return fetchWithErrorHandling<NotificationListResponse | Notification[]>(
       `${API_BASE_URL}/notifications?page=${page}&pageSize=${pageSize}`
     );
   },

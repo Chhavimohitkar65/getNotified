@@ -53,31 +53,54 @@ const NotificationLogs: React.FC = () => {
     setError(null);
     
     try {
+      // Use a try-catch to handle connection errors better
       const response = await notificationApi.list(page, pageSize);
       
       if (response.error) {
+        console.error('Error fetching notifications:', response.error);
         setError(response.error);
         toast({
           title: 'Error',
-          description: response.error,
+          description: 'Failed to load notifications. Please try again.',
           variant: 'destructive',
         });
       } else if (response.data) {
+        // Successfully fetched data
         if (Array.isArray(response.data)) {
+          // Response is directly an array
           setNotifications(response.data);
-          // Assuming the API returns a total count somewhere, for now we'll just set a placeholder
-          // In a real implementation, the API would return pagination metadata
-          setTotalPages(Math.ceil(response.data.length / pageSize) || 1);
+          setTotalPages(Math.max(1, Math.ceil(response.data.length / pageSize)));
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Response is an object with a data property containing the array
+          setNotifications(response.data.data);
+          
+          // Use the total_pages from the response if available
+          if (typeof response.data.total_pages === 'number') {
+            setTotalPages(response.data.total_pages);
+          } else {
+            // Otherwise calculate from total items
+            const total = response.data.total || response.data.data.length;
+            setTotalPages(Math.max(1, Math.ceil(total / pageSize)));
+          }
         } else {
-          setError('Invalid response format');
+          // Empty or unexpected response
+          console.warn('Unexpected data format:', response.data);
+          setNotifications([]);
+          setTotalPages(1);
+          setError('No notifications available');
         }
+      } else {
+        // Empty response
+        setNotifications([]);
+        setTotalPages(1);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Exception when fetching notifications:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Server connection error';
       setError(errorMessage);
       toast({
-        title: 'Error',
-        description: 'Failed to load notifications',
+        title: 'Connection Error',
+        description: 'Could not connect to notification service. Please ensure the server is running.',
         variant: 'destructive',
       });
     } finally {
@@ -85,10 +108,70 @@ const NotificationLogs: React.FC = () => {
     }
   };
 
+  // Define fetchNotifications inside useEffect to ensure all dependencies are captured
   useEffect(() => {
-    fetchNotifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, statusFilter]);
+    const loadNotifications = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Use a try-catch to handle connection errors better
+        const response = await notificationApi.list(page, pageSize);
+        
+        if (response.error) {
+          console.error('Error fetching notifications:', response.error);
+          setError(response.error);
+          toast({
+            title: 'Error',
+            description: 'Failed to load notifications. Please try again.',
+            variant: 'destructive',
+          });
+        } else if (response.data) {
+          // Successfully fetched data
+          if (Array.isArray(response.data)) {
+            // Response is directly an array
+            setNotifications(response.data);
+            setTotalPages(Math.max(1, Math.ceil(response.data.length / pageSize)));
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            // Response is an object with a data property containing the array
+            setNotifications(response.data.data);
+            
+            // Use the total_pages from the response if available
+            if (typeof response.data.total_pages === 'number') {
+              setTotalPages(response.data.total_pages);
+            } else {
+              // Otherwise calculate from total items
+              const total = response.data.total || response.data.data.length;
+              setTotalPages(Math.max(1, Math.ceil(total / pageSize)));
+            }
+          } else {
+            // Empty or unexpected response
+            console.warn('Unexpected data format:', response.data);
+            setNotifications([]);
+            setTotalPages(1);
+            setError('No notifications available');
+          }
+        } else {
+          // Empty response
+          setNotifications([]);
+          setTotalPages(1);
+        }
+      } catch (err) {
+        console.error('Exception when fetching notifications:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Server connection error';
+        setError(errorMessage);
+        toast({
+          title: 'Connection Error',
+          description: 'Could not connect to notification service. Please ensure the server is running.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadNotifications();
+  }, [page, pageSize, statusFilter, toast]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);

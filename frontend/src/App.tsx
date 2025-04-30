@@ -13,6 +13,7 @@ import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import DocumentationPage from "./pages/DocumentationPage";
 import ChannelManager from "./components/channels/ChannelManager";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/channels" element={<ChannelManager />} />
+            <Route path="/documentation" element={<DocumentationPage />} />
           </Route>
           
           <Route path="*" element={<NotFound />} />

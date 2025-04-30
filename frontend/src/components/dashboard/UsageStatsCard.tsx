@@ -1,26 +1,59 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
-// Mock data for the chart
-const data = [
-  { name: 'Jan', sent: 400, delivered: 380, failed: 20 },
-  { name: 'Feb', sent: 500, delivered: 470, failed: 30 },
-  { name: 'Mar', sent: 600, delivered: 570, failed: 30 },
-  { name: 'Apr', sent: 780, delivered: 750, failed: 30 },
-  { name: 'May', sent: 900, delivered: 870, failed: 30 },
-  { name: 'Jun', sent: 1100, delivered: 1050, failed: 50 },
-  { name: 'Jul', sent: 1500, delivered: 1450, failed: 50 },
-];
+import { statsApi } from '@/lib/api_stats';
+import { Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const UsageStatsCard = () => {
-  // Stats for current month
-  const currentMonthStats = {
-    sent: 1500,
-    delivered: 1450,
-    failed: 50,
-    deliveryRate: "96.7%"
-  };
+  const [chartData, setChartData] = useState<{name: string; sent: number; delivered: number; failed: number}[]>([]);
+  const [currentMonthStats, setCurrentMonthStats] = useState({
+    sent: 0,
+    delivered: 0,
+    failed: 0,
+    deliveryRate: "0%"
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setIsLoading(true);
+        const response = await statsApi.getNotificationStats();
+        
+        if (response.error) {
+          setError(response.error);
+          toast({
+            title: 'Error loading stats',
+            description: response.error,
+            variant: 'destructive',
+          });
+        } else if (response.data) {
+          // Update chart data
+          setChartData(response.data.monthly_breakdown);
+          
+          // Update current month stats
+          setCurrentMonthStats({
+            sent: response.data.current_month.total_sent,
+            delivered: response.data.current_month.total_delivered,
+            failed: response.data.current_month.total_failed,
+            deliveryRate: response.data.current_month.delivery_rate
+          });
+          
+          setError(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch notification stats:', err);
+        setError('Failed to load notification statistics');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchStats();
+  }, [toast]);
 
   return (
     <Card className="w-full">
@@ -51,46 +84,62 @@ const UsageStatsCard = () => {
         </div>
         
         <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={data}
-              margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 5,
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Area 
-                type="monotone" 
-                dataKey="sent" 
-                stackId="1" 
-                stroke="#3B82F6" 
-                fill="#3B82F6" 
-                fillOpacity={0.8} 
-              />
-              <Area 
-                type="monotone" 
-                dataKey="delivered" 
-                stackId="2" 
-                stroke="#10B981" 
-                fill="#10B981" 
-                fillOpacity={0.6} 
-              />
-              <Area 
-                type="monotone" 
-                dataKey="failed" 
-                stackId="3" 
-                stroke="#EF4444" 
-                fill="#EF4444" 
-                fillOpacity={0.6} 
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-[230px]">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="flex justify-center items-center h-[230px] text-destructive">
+              <p>Error loading statistics</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="sentGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#84cc16" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#84cc16" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="deliveredGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false}
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis 
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12 }}
+                  width={35}
+                />
+                <Tooltip />
+                <Area 
+                  type="monotone" 
+                  dataKey="sent" 
+                  stackId="1"
+                  stroke="#84cc16" 
+                  fill="url(#sentGradient)" 
+                  strokeWidth={2}
+                  activeDot={{ r: 6 }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="delivered" 
+                  stackId="2"
+                  stroke="#60a5fa" 
+                  fill="url(#deliveredGradient)" 
+                  strokeWidth={2}
+                  activeDot={{ r: 6 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </CardContent>
     </Card>

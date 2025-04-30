@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -102,12 +102,7 @@ const Sidebar = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarLink
-                icon={<MessageSquare size={20} />}
-                label="Recommendations"
-                href="/recommendations"
-                isActive={false}
-              />
+              {/* Recommendations link removed as requested */}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -115,19 +110,14 @@ const Sidebar = () => {
         <SidebarGroup>
           <SidebarGroupLabel>Resources</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarLink
-              icon={<Settings size={20} />}
-              label="Settings"
-              href="/settings"
-              isActive={false}
-            />
+            
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">
+                  <Link to="/documentation">
                     <MessageSquare className="h-5 w-5" />
                     <span>Documentation</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
