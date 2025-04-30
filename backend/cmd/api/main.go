@@ -214,10 +214,15 @@ func setupRouter(cfg *config.Config, db *database.PostgresDB, kafkaProducer *kaf
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Initialize rate limiter middleware (2 requests per 30 seconds)
+	rateLimiter := middleware.NewRateLimiterMiddleware(2, 30*time.Second)
+
 	// Protected routes (auth required)
 	protected := router.Group("/api/v1")
 	// Create a group for endpoints that can be accessed with either JWT or API Key
 	apiGroup := router.Group("/api/v1")
+	// Apply rate limiter and API key middleware
+	apiGroup.Use(rateLimiter.Middleware())
 	apiGroup.Use(middleware.APIKeyAuthMiddleware(cfg.Auth, userRepo, logger))
 	
 	// Apply JWT auth middleware for endpoints that require user authentication
